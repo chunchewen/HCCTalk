@@ -1,0 +1,843 @@
+---
+title: "Exploring the Beta-Binomial Model: Analyzing Overdispersed Binomial Data"
+subtitle: "Holling Cancer Center Talk"
+author: Dr. Brian Neelon and Chun-Che Wen
+date: "May 09, 2024"
+output: beamer_presentation
+urlcolor: blue
+header-includes:
+   - \usepackage{amsmath,amssymb}
+   - \usepackage{caption}
+   - \usepackage{xcolor}
+   - \usepackage[table]{xcolor}
+   - \usepackage{bbding}
+   - \usepackage{multirow}
+   - \captionsetup[figure]{font=scriptsize}
+   - \newcommand{\bb}{\text{BB}}
+   - \newcommand{\bin}{\text{Bin}}
+   - \newcommand{\pr}{\text{Pr}}
+   - \newcommand{\logit}{\text{logit}}
+   - \newcommand{\var}{\text{Var}}
+   - \newcommand{\E}{\text{E}}
+   - \newcommand{\blue}{\textcolor{blue}}
+   - \newcommand{\green}{\textcolor{ForestGreen}}
+   - \newcommand{\red}{\textcolor{red}}
+---
+
+```{r, setup, echo=FALSE,warning=FALSE,message=FALSE}
+knitr::opts_chunk$set(warning=FALSE,message=FALSE)
+rm(list=ls())
+### Set Working Directory For Figure
+figure <- "C:\\Users\\chech\\OneDrive - Medical University of South Carolina\\Research\\Beta-Binomial Model\\Hollings Talk\\Slides\\Figures\\"
+
+### Load package
+library(knitr)
+library(ggplot2)
+library(dplyr)
+### Import data
+inp<-"C:\\Users\\chech\\OneDrive - Medical University of South Carolina\\Research\\BB Mixture Model\\Mixture Model\\Application\\R code\\Descriptive Figures\\"
+d<-read.csv(paste(inp,"PPA_7day_only.csv",sep=""))
+colnames(d)[1]<-"id"
+#-------------------------------------------------------------------------------#
+n<-length(unique(d$id))    # num of subjects
+N<-nrow(d)                 # num of observations
+m<-7                  # trials (past 7 days) 
+nis<-d%>%group_by(id)%>%
+  summarise(n=n())%>%
+  pull(n)              # repeated measure by subject
+id<-rep(unique(d$id),nis)  # ID number
+y<-d$days.abstinent        # days of abstinent from the past 7 days
+t<-d$visit                                    # time (time)
+X<-cbind(1,t)                            # design matrix (with interaction)
+dat<-data.frame(id=id,y=y,m=7,t=t)
+dat$id<-factor(dat$id)
+```
+
+## Overdispersed Binomial Data {.t}
+
+Binomial model 
+
+- Binomial distribution assumes the Bernoulli trials are independent of one another (e.g. coin toss).
+
+- If this assumption is violated, then data have a greater variation than assumed under the binomial data.
+  
+- As known as **overdispersion (OD)**
+
+- Traditional normal and Poisson model may not be appropriate
+  
+  - Poisson model assumes unlimited upper bound. 
+  
+- We will present a few examples in the next slides
+
+## Potential Applications - (1) {.t}
+\fontsize{9pt}{7.2}\selectfont
+
+\underline{Timeline Followback (TLFB) Data}
+
+Number of abstinent days for prior week, ranging from 0 to 7
+
+Subject ID: 1    
+\vspace{2mm}
+\begin{tabular}{|*{7}{c|}}
+\hline
+\multirow{2}{*}{Monday} & \multirow{2}{*}{Tuesday} & \multirow{2}{*}{Wednesday} & \multirow{2}{*}{Thursday} & \multirow{2}{*}{Friday} & \multirow{2}{*}{Saturday} & \multirow{2}{*}{Sunday} \\
+& & & & & & \\
+\hline
+&   &  & $\times$  &  $\times$ & $\times$ & $\times$ \\
+\hline
+\end{tabular}
+TLFB$=4$
+
+\vspace{3mm}
+
+Subject ID: 2    
+\vspace{2mm}
+\begin{tabular}{|*{7}{c|}}
+\hline
+\multirow{2}{*}{Monday} & \multirow{2}{*}{Tuesday} & \multirow{2}{*}{Wednesday} & \multirow{2}{*}{Thursday} & \multirow{2}{*}{Friday} & \multirow{2}{*}{Saturday} & \multirow{2}{*}{Sunday} \\
+& & & & & & \\
+\hline
+$\times$&   &  &  &  & & $\times$ \\
+\hline
+\end{tabular}
+TLFB$=2$
+
+
+
+
+## Potential Applications - (2) {.t}
+
+\underline{Adverse Childhood Experiences (ACEs) Questionnaire Survey}
+
+Participants document the cumulative count of adverse childhood events, ranging from 0 to 10 occurrences
+
+```{r, echo=FALSE,out.width="70%",fig.align='center'}
+knitr::include_graphics(paste(figure,"ACEs.png",sep=""))
+```
+
+
+## Other Potential Applications {.t}
+
+- Number of readmissions within at 30 days period 
+
+- Number of tissue factor + cells among all CD3+/CD4+ cells
+
+
+
+## Inference Approaches
+
+- Frequentist inference
+
+  - **Parametric Beta-Binomial (BB) Model** (Focus)
+
+  - Quasi-likelihood Method (R Code)
+  
+- Bayesian inference (Flexible modeling)
+
+
+# Beta-Binomial Distribution 
+
+## Derivation of Beta-Binomial Distribution {.t}
+
+\begin{align*}
+Y| \pi &\sim \bin(m,\pi)  \\
+\pi &\sim \text{Beta}(a,b), 
+\end{align*}
+
+- $m=$ the total number of Bernoulli trials
+
+- $\pi=$ **random variable**, representing the probability of success
+
+- $a$ and $b$ are the two shape parameters in beta distribution. 
+
+- Recall: the mean and variance of Beta$(a,b)$ distribution
+
+  - $\E(\pi)=\frac{a}{a+b}$
+
+  - $\var(\pi)=\frac{ab}{(a+b)^2(a+b+1)}=\left(\frac{a}{a+b}\right)\left(\frac{b}{a+b}\right)\boxed{\left(\frac{1}{a+b+1}\right)}$
+
+
+## Derivation of Beta-Binomial Distribution (Cont.) {.t}
+\fontsize{10pt}{7.2}\selectfont
+
+Marginal pdf of $Y$:
+\vspace{-2mm}
+\begin{align*}
+f(Y=y) &= \int_{0}^{1}\pr(Y|\pi)\pr(\pi) d\pi  = \int_{0}^{1}\pr(Y,\pi) d\pi \\
+       &= \int_{0}^{1}\underbrace{\binom{m}{y}\pi^y(1-\pi)^{m-y}}_{\bin(m,\pi)}\underbrace{\frac{\Gamma(a+b)}{\Gamma(a)\Gamma(b)}\pi^{a-1}(1-\pi)^{b-1}}_{\text{Beta}(a,b)} d\pi \\
+       &= \binom{m}{y}\frac{\Gamma(a+b)}{\Gamma(a)\Gamma(b)}\int_{0}^{1}\pi^y(1-\pi)^{m-y}\pi^{a-1}(1-\pi)^{b-1} d\pi \\
+       &= \binom{m}{y}\frac{\Gamma(a+b)}{\Gamma(a)\Gamma(b)}\underbrace{\int_{0}^{1}\pi^{(y+a)-1}(1-\pi)^{(m-y+b)-1}}_{\text{kernel of Beta}(y+a,m-y+b)} d\pi \\
+       &= \binom{m}{y}\frac{\Gamma(a+b)}{\Gamma(a)\Gamma(b)}\frac{\Gamma(y+a)\Gamma(m-y+b)}{\Gamma(m+a+b)} \\
+       &= \binom{m}{y} \frac{B(y+a,m-y+b)}{B(a,b)}
+\end{align*}
+Note: $B(c,s)=\frac{\Gamma(c)\Gamma(d)}{\Gamma(c+d)}=\frac{(c-1)!(d-1)!}{(c+d-1)!}$
+
+
+
+
+## Mean and Variance of BB Distribution {.t}
+\fontsize{9pt}{7.2}\selectfont
+
+\begin{align*}
+  \E(Y) &= \E[\E(Y|\pi)] = m \frac{a}{a+b} = m\mu \\
+  \var(Y) &= \E[\var(Y|\pi)] + \var[\E(Y|\pi)] \\
+        &= m\mu(1-\mu)\left[1+(m-1)\boxed{\frac{1}{a+b+1}}\right] \\
+        &= m\mu(1-\mu)\left[1+(m-1)\blue{\frac{\theta}{1+\theta}}\right] ~~~ \left(\text{let }\blue{\theta}=\frac{1}{a+b}, \text{~Agresti and Arostegui}\right) \\
+        &= m\mu(1-\mu)\left[1+(m-1)\green{\frac{1}{1+\phi}}\right] ~~~ \left(\text{let }\green{\phi}=a+b, \text{ SAS -- Proc fmm}\right)  \\
+        &= m\mu(1-\mu)\left[1+(m-1)\red{\rho}\right]  ~ \left(\text{let }\red{\rho}=\frac{1}{a+b+1}, \text{R (\texttt{VGAM} and \texttt{aod} package)}\right) 
+  \end{align*}
+  
+  
+Note 1: $m$ can be varied by observations, $Y_{i} \sim \text{BB}(m_i,\mu_i,\rho)$, $i=1,\ldots,n$
+
+Note 2: $\frac{\theta}{1+\theta}=\rho$ the correlation between each pair of the Bernoulli trials.
+
+
+## BB distribution in terms of $\mu$ and ($\theta$, $\phi$, $\rho$) 
+\fontsize{10pt}{7.2}\selectfont
+
+\begin{align*}
+Y &\sim \text{BB}(m,a=\text{Shape 1},b=\text{Shape 2}) \\
+f(Y=y) &= \binom{m}{y} \frac{B(y+a,m-y+b)}{B(a,b)} 
+\end{align*}
+
+- Agresti and Arostegui (2007) \& Najera-Zuloaga (2017)
+$$\boxed{a=\mu/\theta \text{ and } b=(1-\mu)/\theta},$$
+
+- Proc FMM
+$$\boxed{a=\mu\phi \text{ and } b=(1-\mu)\phi},$$
+where $0<\phi$ is called scale parameter.
+
+- R \texttt{VGAM} and \texttt{aod} pacakges
+$$\boxed{a=\mu(1-\rho)/\rho \text{ and } b=(1-\mu)(1-\rho)/\rho},$$
+
+## Summary - (1) {.t}
+
+__In our slides__,
+
+- $\theta=\frac{1}{a+b}>0$
+
+  -  When $\theta \rightarrow \infty$, OD; when $\theta \rightarrow 0$, $Y \rightarrow \bin$
+
+- $\phi=a+b>0$
+
+  -  When $\phi \rightarrow 0$, OD; when $\phi \rightarrow \infty$, $Y \rightarrow \bin$
+  
+- $\rho=\frac{1}{a+b+1}$, $0<\rho<1$
+
+  - When $\rho \rightarrow 1$, OD; when $\rho \rightarrow 0$, $Y \rightarrow \bin$
+  
+  
+Recall: As $\theta \rightarrow 0$, $\phi \rightarrow \infty$, $\rho \rightarrow 0$ in the beta distribution, $\var(\pi)\rightarrow 0$ and beta distribution converges to a degenerate distribution at $\mu$. Then $\var(Y)\rightarrow m\mu(1-\mu)$ and BB distribution coverges to the Bin$(m,\mu)$.
+  
+## Summary - (2) 
+
+\begin{center}
+\begin{tabular}{|c | c | c |} 
+ \hline
+ Software & Parameters &  Correspond to our slides \\ [0.5ex] 
+ \hline\hline
+  Agresti & $\mu$, $\theta$  & $\mu$, $\theta$  \\ 
+ \hline
+  R (\texttt{VGAM} package)& $\mu$, $\rho$  & $\mu$, $\rho$   \\
+ \hline
+  R (\texttt{aod} package) & $\mu$, $\phi$  & $\mu$, $\rho$ \\
+ \hline
+  R (\texttt{PROreg} package)&   &    \\
+ 
+ Arostegui (2007) & $\mu$, $\phi$ & $\mu$, $\theta$ \\
+ 
+ Najera-Zuloaga (2017) & & \\
+ \hline
+ SAS (Proc FMM) & $\mu$, $\phi$  &  $\mu$, $\phi$\\ 
+ \hline
+\end{tabular}
+\end{center}
+
+
+## Beta-Binomial Regression (BBR) Model {.t}
+
+You can use one of (1) $\mu$ and $\theta$, (2) $\mu$ and $\phi$, and (3) $\mu$ and $\rho$ these three parameterizations.
+
+- We choose the logit link function in regression model:
+
+$$\text{logit}(\mu_i)=\alpha+\boldsymbol{x}_i^T\boldsymbol{\beta}$$
+
+- The interpretations of the $\alpha$ and $\boldsymbol{\beta}$ are the same as logistic regression
+
+- In theory, you can also choose probit or cloglog links
+
+# Implementation 
+
+## Data Description: Orobanche {.t}
+\fontsize{10pt}{7.2}\selectfont
+
+Orobanche is a genus of parasitic plants with chlorophyll that grow on the roots of flowering plants.
+
+- Total sample size: $21$
+
+- Outcome (Y): germinated/seeds (Number of germinated/ number of seeds )
+
+- Covariates (X): Host type (Bean and Cucumber) and Variety (0.a73 and 0.a75)
+
+- Regression Model: 
+
+$\text{logit}(\mu_i)=\beta_0+\beta_1\text{Cucumber}_i+\beta_2\text{ 0.a75}_i+\beta_3(\text{Cucmber}_i\times\text{0.a075}_i)$
+
+\vspace{3mm}
+
+```{r, data}
+library(dispmod)
+data(orobanche) # Data
+head(orobanche) # Present the first 6 obs
+```
+
+
+```{r, data2,echo=FALSE,eval=FALSE}
+ggplot(orobanche,aes(x=germinated/seeds)) + 
+  geom_histogram(binwidth=0.05,color="black", fill="skyblue")+
+  scale_x_continuous(breaks=seq(0,1,0.2),limits=c(-0.1,1.1))+
+  theme(axis.text=element_text(size=12),
+        axis.title=element_text(size=14,face="bold"))
+```
+
+
+## Binomial Model {.t}
+\fontsize{8pt}{7.2}\selectfont
+
+```{r, binom}
+# Binomial Model
+mod0<-glm(cbind(germinated, seeds-germinated) ~ host*variety, 
+      data = orobanche, family = binomial)  
+```
+```{r,echo=FALSE}
+mod0tab<-summary(mod0)$coefficients
+rownames(mod0tab)<-c("Intercept","Cucumber","O.a75","Cucumber x O.a75")
+kable(mod0tab,digits=4)
+```
+
+\vspace{-7mm}
+\begin{align*}
+Y_{i} &\sim \text{Bin}(m_i,\mu_i) \\
+\logit(\mu_i) &= \beta_0+\beta_1\text{Cucumber}_i+\beta_2\text{ 0.a75}_i+\beta_3(\text{Cucmber}_i\times\text{0.a075}_i) 
+\end{align*}
+
+- Reference group: Host: Bean  and Variety: 0.a73
+
+- exp($\beta_1$)=exp($0.54$)=$1.72$=OR(Bean + 0.a075 vs ref.)
+
+- exp($\beta_1$+$\beta_2$+$\beta_3$)=exp($1.17$)=$3.23$=OR(Cucumber + 0.a075 vs ref.)
+
+
+## Model Diagnostic  {.t}
+
+
+Liang and McCullagh (1993) suggests plotting Pearson residual from a binomial GLM against $m_i$
+
+- If the variability in the residuals changes as a function of $m_i$, then BB might be preferred.
+
+- If the variability in the residual does not vary as a function of $m_i$, then quasi-binomial model that assumes the constant overdispersion might be preferred.
+
+  - The details of quasi-binomial method is provided in Appendix
+
+
+## Model Diagnostic (conti.)
+\fontsize{8pt}{7.2}\selectfont
+\vspace{3mm}
+
+X-axis: Number of seeds ($m_i$) and Y-axis: Pearson Residuals from a binomial GLM
+
+```{r,diag, out.width="100%",echo=FALSE}
+pearson<-residuals(mod0, type = "pearson")
+
+plotdata<-data.frame(seeds=orobanche$seeds,pearson)
+ggplot(data=plotdata, aes(seeds,pearson))+ geom_point()+
+  geom_hline(yintercept = 0, col="red4")+
+  #geom_smooth(method="loess", se=TRUE, fullrange=FALSE, level=0.95)+
+  theme(axis.text=element_text(size=12),
+        axis.title=element_text(size=14,face="bold"))+
+  xlab("Seeds (m_i)")+ylab("Pearson Residual")+
+  scale_y_continuous(lim=c(-3,3))
+```
+
+
+
+## R Package: "aod" (Analysis of Overdispersed Data) {.t}
+\fontsize{8pt}{7.2}\selectfont
+
+\vspace{3mm}
+
+```{r, bbr}
+# Parametric BB Fit
+library(aod)      # betabin()
+mod1<-betabin(cbind(germinated, seeds-germinated) ~ host*variety,
+              link="logit", # default
+              random=~1, data = orobanche)
+```
+```{r,echo=FALSE}
+mod1tab<-summary(mod1)@Coef
+rownames(mod1tab)<-c("Intercept","Cucumber","O.a75","Cucumber x O.a75")
+kable(mod1tab,digits=4)
+```
+```{r}
+summary(mod1)@Phi # Same as rho in our slide
+```
+
+- Instead of using $\$$ to extract element, use $@$ 
+
+- Phi corresponds to $\rho=\frac{1}{a+b+1}$ ($0<\rho<1$) in our slide
+
+- Significance of test $H_0: \rho=0$ vs $H_0: \rho>0$. $P-value=0.14$ suggests we cannot conclude that $\rho$ is significantly different from $0$
+
+  - This could be due to lack of power under the z-test, given the small sample comprising only 21 slides.
+
+## SAS Code: "PROC FMM" (Finite mixture model) {.t}
+
+```{r, fmm, eval=FALSE}
+proc fmm data=one;
+ model y/m= cuke oa75 int/dist=bb ;
+run;
+```
+
+```{r, echo=FALSE,out.width="70%",fig.align='center'}
+knitr::include_graphics(paste(figure,"fmm_result.png",sep=""))
+```
+
+```{r, fmm2}
+# Scale Parameter = phi = a+b (in our slide)
+cat("rho=",1/(1+79.003)) # compared to aod pacakge
+```
+
+
+
+## Summary Table {.t}
+\fontsize{6.5pt}{7.2}\selectfont
+
+```{r, ql0,echo=FALSE}
+# Quasi-Likelihood Method for Binomial-Type Variance
+mod2<-glm(cbind(germinated, seeds-germinated) ~ host*variety, 
+      data = orobanche, family = quasibinomial)
+
+# Quasi-Likelihood Method for Binomial-Type Variance
+mod3<-quasibin(cbind(germinated, seeds-germinated)~ host*variety, 
+               data=orobanche)
+```
+
+
+```{r,sum,echo=FALSE}
+est.fmm<-c(-0.4446,0.5221,-0.08739,0.7979)
+sumtab<-data.frame(bin=c(summary(mod0)$coefficients[,1]),
+                   bb=c(mod1tab[,1]),
+                   fmm=est.fmm,
+                   qbin=c(summary(mod2)$coefficients[,1]),
+                   qbb=c(coef(mod3)))%>%round(4)
+odpar<-c("NA","$\\rho=0.0124$","$\\phi=79.003$","$\\psi=1.8618$","$\\psi=0.0249$")
+
+sumtab2<-rbind(sumtab,odpar)
+
+
+colnames(sumtab2)<-c("Binomial","Beta-Binomial (aod)","Beta-Binomial (FMM)","QL-Bin$^*$","QL-BB (aod)$^*$")
+rownames(sumtab2)<-c("Intercept","Cucumber","O.a75","Cucumber x O.a75","OD Par.")
+kable(sumtab2,digits=4,align="lcccc")
+```
+
+$$\text{logit}(\mu_i)=\beta_0+\beta_1\text{Cucumber}_i+\beta_2\text{ 0.a75}_i+\beta_3(\text{Cucmber}_i\times\text{0.a075}_i)$$
+
+Odds ratio results from beta-binomial model:
+
+- Reference group: Host: Bean  and Variety: 0.a73
+
+- exp($\beta_1$)=exp($0.5235$)=$1.69$=OR(Cucumber + 0.a073 vs ref.)
+
+- exp($\beta_2$)=exp(-$0.0.91$)=$0.91$=OR(Bean + 0.a075 vs ref.)
+
+- exp($\beta_1$+$\beta_2$+$\beta_3$)=exp($1.2236$)=$3.40$=OR(Cucumber + 0.a075 vs ref.)
+
+
+\vspace{1cm}
+$^*$Quasi-likelihood (QL) methods of binomial/beta-binomial types of variance. Details and code are presented in Appendix.
+
+## Longitudinal BB Data {.t}
+
+Smoking Cessation Study (two-arm randomized trial)
+
+- At each weekly visit, participants reported the number of abstinent days during the past
+week (7 days).
+
+- Timeline followback (TLFB) assessments of abstinence days were measured weekly over
+the course of the 12-week study.
+
+## Extend to BB Mixed Model {.t}
+
+$Y_{ij}$= number of abstinent days for the prior week for subject $i$ at $j$-th visit
+\begin{align*}
+Y_{ij} &\sim \text{BB}(m=7,\mu_{ij},\rho) \\
+\logit(\mu_{ij}) &= \boldsymbol{x}_{ij}^T\boldsymbol{\beta}+\boldsymbol{u}_{ij}^T\boldsymbol{b}_i \\
+\boldsymbol{b}_i &\sim \text{N}_q(\boldsymbol{0},\boldsymbol{G})
+\end{align*}
+
+- Fixed effect model
+$$\logit(\mu_{ij}) = \beta_0+\beta_1 t_{ij}$$
+
+- Random intercept model
+$$\logit(\mu_{ij}) = \beta_0+\beta_1 t_{ij} +\blue{b_i} = (\beta_0+\blue{b_i})+\beta_1 t_{ij}$$
+- Random slope model
+$$\logit(\mu_{ij}) = \beta_0+\beta_1 t_{ij} +\blue{b_{1i}} + \blue{b_{2i}}t_{ij} = (\beta_0+\blue{b_{1i}})+(\beta_1+\blue{b_{2i}})t_{ij} $$
+
+## Data Description: Smoking Cessation Study {.t}
+
+- $y=$ number of abstient days for the prior week
+
+- $m=7$ days (prior week)
+
+- $t=$ time variable, ranging $1$ to $12$
+
+```{r, smoking}
+library(PROreg) # BBmm()
+head(dat)
+```
+
+- Unfortunately, we can't share the data. Please see "Simulated BB Mixed Mode.R" for simulated data.  
+
+
+```{r,bbdata,echo=FALSE}
+setwd("C:\\Users\\chech\\OneDrive - Medical University of South Carolina\\Research\\Beta-Binomial Model\\R codes\\")
+load("BBmixed Model.RData")
+```
+
+
+## BB Random Intercept Model {.t}
+
+$$\logit(\mu_{ij}) = \beta_0+\beta_1 t_{ij}  +\blue{b_i} = (\beta_0+\blue{b_i})+\beta_1 t_{ij}$$
+
+```{r,randint,eval=FALSE}
+model <- BBmm(fixed.formula = y~t,
+              random.formula = ~id,m=7,data=dat)
+```
+
+- $m=7$ days (prior week) 
+
+- Need to factorize __id__ variable in your dataset
+
+
+##
+
+\fontsize{6pt}{7.2}\selectfont
+
+```{r,randint_res}
+summary(model)
+```
+
+
+## BB Random Intercept Model (Alternative) {.t}
+
+- Stack all observations ($i,j$): $\logit(\boldsymbol{\mu})=\boldsymbol{X}\boldsymbol{\beta}+\boldsymbol{Z}\boldsymbol{b}$
+
+```{r,randint2, eval=FALSE}
+library(lme4)
+# Create random effect design matrix
+randformula = "y ~ t  + (1 | id)"
+tmp <- lFormula(eval(randformula), dat)
+Z <- t(as.matrix(tmp$reTrms$Zt))
+```
+\vspace{-0.5cm}
+$$\boldsymbol{Z}=\left(\begin{array}{cccccc}
+                                \rowcolor{red!20}
+                                1 & 0 & 0 & \ldots & 0 & \\
+                                \rowcolor{red!20}
+                                1 & 0 & 0 & \ldots & 0 & \}\text{ repeat}~n_1 \text{ times} \\
+                                \ldots&\ldots&\ldots&\ldots&\ldots& \\
+                                \rowcolor{blue!20}
+                                0 & 1 & 0 & \ldots & 0 & \\
+                                \rowcolor{blue!20}
+                                0 & 1 & 0 & \ldots & 0 & \}\text{ repeat}~n_2 \text{ times} \\
+                                \ldots&\ldots&\ldots&\ldots&\ldots& \\
+                                \rowcolor{green!20}
+                                0 & 0 & 0 & \ldots & 1 & \\
+                                \rowcolor{green!20}
+                                0 & 0 & 0 & \ldots & 1 & \}\text{ repeat}~n_n \text{ times}
+                                \end{array}\right); 
+\boldsymbol{b}=\begin{bmatrix} b_1 \\ b_2 \\ \vdots \\ b_n \end{bmatrix}$$
+
+
+
+
+## BB Random Intercept Model (Alternative) {.t}
+
+```{r,randint4,eval=FALSE}
+model2 <-BBmm(y=y,X=X,Z=Z,m=7,nRandComp=n)
+```
+
+- $y=$ number of abstinent days, $Y_{ij}$
+
+- $\boldsymbol{X}=$ fixed effect design matrix
+
+- $\boldsymbol{Z}=$ random effect design matrix
+
+- $m=$ number of Bernoulli trials
+
+- $nRandComp=$ the number of random effects in each random component of the model (number of subjects)
+
+- If you specify $\boldsymbol{Z}$, do not use \texttt{ramdom.formula} argument at the same time. 
+
+##
+
+\fontsize{6pt}{7.2}\selectfont
+
+```{r, randint2_res}
+summary(model2)  # same as model 1
+```
+
+## BB Random Intercept + Slope Model {.t}
+
+$$\logit(\mu_{ij}) = \beta_0+\beta_1 t_{ij} +\blue{b_{1i}} + \blue{b_{2i}}t_{ij} = (\beta_0+\blue{b_{1i}})+(\beta_1+\blue{b_{2i}})t_{ij} $$
+
+- Stack all observations ($i,j$):
+$$\logit(\boldsymbol{\mu})=\boldsymbol{X}\boldsymbol{\beta}+\underbrace{\boldsymbol{Z}_1\boldsymbol{b}_1}_{\text{Rand. Int.}}+\underbrace{\boldsymbol{Z}_2\boldsymbol{b}_2}_{\text{Rand. Sp.}}$$
+
+
+```{r, randsl,eval=FALSE}
+randformula = "y ~ t + (1 + t | id)"
+tmp <- lFormula(eval(randformula), dat)
+Z <- t(as.matrix(tmp$reTrms$Zt))
+Z1<-Z[,seq(1,dim(Z)[2],by=2)] # Random intercept matrix
+Z2<-Z[,seq(2,dim(Z)[2],by=2)] # Random slope matrix
+Zstar<-cbind(Z1,Z2)
+```
+
+## 
+
+\fontsize{9pt}{7.2}\selectfont
+
+$$\boldsymbol{Z}_1=\left(\begin{array}{cccccc}
+                                \rowcolor{red!20}
+                                1 & 0 & 0 & \ldots & 0 & \\
+                                \rowcolor{red!20}
+                                1 & 0 & 0 & \ldots & 0 & \}\text{ repeat}~n_1 \text{ times} \\
+                                \ldots&\ldots&\ldots&\ldots&\ldots& \\
+                                \rowcolor{blue!20}
+                                0 & 1 & 0 & \ldots & 0 & \\
+                                \rowcolor{blue!20}
+                                0 & 1 & 0 & \ldots & 0 & \}\text{ repeat}~n_2 \text{ times} \\
+                                \ldots&\ldots&\ldots&\ldots&\ldots& \\
+                                \rowcolor{green!20}
+                                0 & 0 & 0 & \ldots & 1 & \\
+                                \rowcolor{green!20}
+                                0 & 0 & 0 & \ldots & 1 & \}\text{ repeat}~n_n \text{ times}
+                                \end{array}\right); \boldsymbol{b}_1=\begin{bmatrix} b_{11} \\ b_{12} \\ \vdots \\ b_{1n} \end{bmatrix}$$
+\noindent\makebox[\linewidth]{\rule{\paperwidth}{0.4pt}}
+
+$$\boldsymbol{Z}_2=\left(\begin{array}{cccccc}
+                                \rowcolor{red!20}
+                                t_{11} & 0 & 0 & \ldots & 0 & \\
+                                \rowcolor{red!20}
+                                t_{12} & 0 & 0 & \ldots & 0 &  \\
+                                \rowcolor{red!20}
+                                \vdots&\vdots&\vdots&\ldots&\vdots&  \}\text{ repeat}~n_1 \text{ times}\\
+                                \rowcolor{red!20}
+                                t_{1n_1} & 0 & 0 & \ldots & 0 &  \\
+                                \rowcolor{blue!20}
+                                0 & t_{21} & 0 & \ldots & 0 & \\
+                                \rowcolor{blue!20}
+                                0 & t_{22} & 0 & \ldots & 0 &  \\
+                                \rowcolor{blue!20}
+                                \vdots&\vdots&\vdots&\ldots&\vdots& \}\text{ repeat}~n_2 \text{ times} \\
+                                \rowcolor{blue!20}
+                                0 & t_{2n_2} & 0 & \ldots & 0 &  \\
+                                \vdots&\vdots&\vdots&\vdots&\vdots& \\
+                                \rowcolor{green!20}
+                                0 & 0 & 0 & \ldots & t_{n_1} & \\
+                                \rowcolor{green!20}
+                                0 & 0 & 0 & \ldots & t_{n_2} & \\
+                                \rowcolor{green!20}
+                                \vdots&\vdots&\vdots&\ldots&\vdots& \}\text{ repeat}~n_n \text{ times} \\
+                                \rowcolor{green!20}
+                                0 & 0 & 0 & \ldots & t_{n_n} &
+                                \end{array}\right); \boldsymbol{b}_2=\begin{bmatrix} b_{21} \\ b_{22} \\ \vdots \\ b_{2n} \end{bmatrix}$$                                
+                              
+
+##
+
+```{r, randsl2,eval=FALSE}
+model2 <-BBmm(y=y,X=X,Z=Zstar,m=7,nRandComp=c(n,n))
+```
+
+- $y=$ number of abstinent days, $Y_{ij}$
+
+- $\boldsymbol{X}=$ fixed effect design matrix
+
+- $\boldsymbol{Z}=$ random effect design matrix (Intercept+Slope)
+
+- $m=$ number of Bernoulli trials
+
+- $nRandComp=$ the number of random effects in each random component of the model (number of subjects)
+
+- Note: For the random slope model, we recommend to specify the model in terms of design matrix, such as $\boldsymbol{X}$ and $\boldsymbol{Z}$ as mentioned above
+
+##  
+
+\fontsize{6pt}{7.2}\selectfont
+
+```{r, randsl_res}
+summary(model3)
+```
+
+# Special Modelings
+
+## Bayesian Modeling {.t}
+
+- Likelihood: 
+
+  - $Y_i \sim \text{BB}(m_i,\mu_i,\rho)$
+
+  - $\logit(\mu_i) = \boldsymbol{x}_i^T\boldsymbol{\beta}$
+
+- Priors:
+
+  - $\boldsymbol{\beta} \sim \text{N}(\boldsymbol{\mu}_0,\boldsymbol{\Sigma}_0)$ 
+
+  - $\rho \sim \text{Unif}(0,1)$
+
+- Posterior $\propto$ Likelihood $\times$ Prior 
+
+  - Post. $=\prod_{i=1}^{n}p(y_i|\boldsymbol{\beta},\rho)\times\pi(\boldsymbol{\beta})\times\pi(\rho)$
+
+- Metropolis-Hasting (MH) Steps
+
+## Changepoint Model
+
+```{r, echo=FALSE,out.width="70%",fig.align='center'}
+knitr::include_graphics(paste(figure,"meantrend.jpg",sep=""))
+```
+
+## Zero-Inflated Model
+
+```{r, echo=FALSE,out.width="70%",fig.align='center'}
+knitr::include_graphics(paste(figure,"hist.jpg",sep=""))
+```
+
+## Mixture Model
+
+::: columns
+
+:::: column
+
+\red{Placebo Group}
+
+```{r, echo=FALSE,out.width="110%"}
+knitr::include_graphics(paste(figure,"selected_subj_trends_pl.jpg",sep=""))
+```
+
+::::
+
+:::: column
+
+\blue{Varenicline Group}
+```{r, echo=FALSE,out.width="110%"}
+knitr::include_graphics(paste(figure,"selected_subj_trends_tx.jpg",sep=""))
+```
+
+::::
+
+:::
+
+
+# Appendix
+
+## Generate BB data in R
+\fontsize{8pt}{7.2}\selectfont
+
+
+```{r, genbb, eval=F}
+library(VGAM) # rbetabinom()
+
+n<-350          # Number of obs
+m<-20           # Number of Bernolli trials (can by varied)
+
+# Covariates
+x1<-rnorm(n)  
+x2<-rbinom(n,1,0.5)
+X<-cbind(1,x1,x2)
+
+# Fixed effects
+beta<-c(-0.5,1.0,-0.5)
+
+# Correlation parameter (0<rho<1)
+rho<-0.25
+
+# Linear predictors
+eta<-X%*%beta
+# Logit link (can be probit/cloglog links)
+pi<-exp(eta)/(1+exp(eta))
+
+# Generate outcomes
+y<-rbetabinom(n=n,size=m,prob=pi,rho=rho)
+```
+
+
+## Quasi-likelihood (QL) Method - Binomial Type of Variance {.t}
+\fontsize{8pt}{7.2}\selectfont
+
+- Instead of specifying distribution for $Y$, we specify the relationship b/t mean and variance functions.
+
+- $\var(Y_i)=v(\mu_i)=m_i\mu_i(1-\mu_i)$, under binomial sampling and $v(\mu_i)$ is the variance function.
+
+- Alternative variance function: $\var(Y_i)=\psi v(\mu_i)$, for some constant $\psi$
+
+- $\var(Y_i)=\psi [m_i\mu_i(1-\mu_i)]$
+
+- $\psi>1$ represent overdispersion in binomial model
+
+```{r, ql}
+# Quasi-Likelihood Method
+mod2<-glm(cbind(germinated, seeds-germinated) ~ host*variety, 
+      data = orobanche, family = quasibinomial)
+```
+```{r,echo=FALSE}
+mod2tab<-summary(mod2)$coefficients
+rownames(mod2tab)<-c("Intercept","Cucumber","O.a75","Cucumber x O.a75")
+kable(mod2tab,digits=4)
+```
+```{r}
+summary(mod2)$dispersion # psi above
+```
+
+## QL Method - Correlated Bernoulli Trials {.t}
+\fontsize{8pt}{7.2}\selectfont
+
+- Assume a common correlation $(\psi)$ between each pair of $m_i$
+
+- Suppose $\pi_i=P(Y_{it}=1)$, for $t=1,\ldots,m_i$ and corr$(Y_{it},Y_{is})=\psi$ for $s\ne t$
+
+- Then, $\var(Y_{it})=\pi_i(1-\pi_i)$ and cov$(Y_{is},Y_{it})=\psi\pi_i(1-\pi_i)$
+
+- $\var(Y_i=\sum_{y=1}^{m_i}Y_{it})=m_i\mu_i(1-\mu_i)[1+(m_i-1)\psi]$
+
+- $\psi>-1/(m_i-1)$ to ensure the $\var(Y_i)>0$ 
+
+```{r, qlbb}
+# Quasi-Likelihood Method
+library(aod)
+mod3<-quasibin(cbind(germinated, seeds-germinated)~ host*variety, 
+               data=orobanche)
+mod3
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
